@@ -8,6 +8,7 @@ import { KubernetesExecutor } from './executors/kubernetes.ts'
 import { AwsEcsExecutor } from './executors/aws-ecs.ts'
 import { GcpBatchExecutor } from './executors/gcp-batch.ts'
 import { HetznerExecutor } from './executors/hetzner.ts'
+import { NomadExecutor } from './executors/nomad.ts'
 import type { Executor, RunnerVolume, VolumeMode } from './executor.ts'
 
 export interface RawEnv {
@@ -90,6 +91,16 @@ export interface RawEnv {
   HETZNER_LABELS?: string
   HETZNER_DISABLE_IPV4?: string
   HETZNER_DISABLE_IPV6?: string
+
+  // Nomad executor
+  NOMAD_ADDR?: string
+  NOMAD_TOKEN?: string
+  NOMAD_NAMESPACE?: string
+  NOMAD_REGION?: string
+  NOMAD_DATACENTERS?: string
+  NOMAD_JOB_PREFIX?: string
+  NOMAD_CPU_MHZ?: string
+  NOMAD_MEMORY_MB?: string
 
   // GCP Batch executor
   GCP_PROJECT?: string
@@ -288,6 +299,22 @@ function buildExecutorFromEnv(env: RawEnv): Executor {
       labels: parseLabels(env.HETZNER_LABELS),
       enableIpv4: env.HETZNER_DISABLE_IPV4 ? !parseRequiredBool(env.HETZNER_DISABLE_IPV4) : undefined,
       enableIpv6: env.HETZNER_DISABLE_IPV6 ? !parseRequiredBool(env.HETZNER_DISABLE_IPV6) : undefined,
+      imageNamespace: env.RUNNER_IMAGE_NAMESPACE,
+    })
+  }
+  if (choice === 'nomad') {
+    if (!env.NOMAD_ADDR) {
+      throw new Error('EXECUTOR=nomad requires NOMAD_ADDR')
+    }
+    return new NomadExecutor({
+      address: env.NOMAD_ADDR,
+      token: env.NOMAD_TOKEN,
+      namespace: env.NOMAD_NAMESPACE,
+      region: env.NOMAD_REGION,
+      datacenters: parseList(env.NOMAD_DATACENTERS),
+      jobPrefix: env.NOMAD_JOB_PREFIX,
+      cpuMhz: parseOptionalInt(env.NOMAD_CPU_MHZ),
+      memoryMb: parseOptionalInt(env.NOMAD_MEMORY_MB),
       imageNamespace: env.RUNNER_IMAGE_NAMESPACE,
     })
   }

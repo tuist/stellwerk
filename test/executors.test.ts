@@ -5,6 +5,7 @@ import { FlyExecutor } from '../src/executors/fly.ts'
 import { GcpBatchExecutor } from '../src/executors/gcp-batch.ts'
 import { HetznerExecutor } from '../src/executors/hetzner.ts'
 import { KubernetesExecutor } from '../src/executors/kubernetes.ts'
+import { NomadExecutor } from '../src/executors/nomad.ts'
 import type { SpawnOpts } from '../src/executor.ts'
 
 const spawnOpts: SpawnOpts = {
@@ -269,6 +270,98 @@ describe('HetznerExecutor', () => {
       fetchFn,
     })
     await expect(executor.destroyRunner('999')).resolves.toBeUndefined()
+  })
+})
+
+describe('NomadExecutor', () => {
+  it('registers a one-shot batch job and returns its job id', async () => {
+    const { fetchFn, calls } = captureFetch([{ EvalID: 'eval-1' }])
+    const executor = new NomadExecutor({
+      address: 'https://nomad.test/',
+      token: 'nomad-token',
+      datacenters: ['dc1'],
+      fetchFn,
+    })
+
+    const id = await executor.spawnRunner(spawnOpts)
+
+    expect(id).toMatch(/^stellwerk-github-42-/)
+    expect(calls[0]?.url).toBe('https://nomad.test/v1/jobs')
+    expect(calls[0]?.init.headers).toMatchObject({ 'x-nomad-token': 'nomad-token' })
+    expect(calls[0]?.body).toMatchObject({
+      Job: {
+        ID: id,
+        Type: 'batch',
+        Datacenters: ['dc1'],
+        Meta: { stellwerk_job_id: '42', stellwerk_forge: 'github' },
+        TaskGroups: [
+          {
+            Name: 'runner',
+            Count: 1,
+            Tasks: [
+              {
+                Driver: 'docker',
+                Config: { image: 'ghcr.io/stellwerk/runner-github:latest' },
+                Env: { RUNNER_TOKEN: 'tok-123' },
+              },
+            ],
+          },
+        ],
+      },
+    })
+  })
+
+  it('maps scratch volumes to ephemeral disk and persistent volumes to host volumes', async () => {
+    const { fetchFn, calls } = captureFetch([{}])
+    const executor = new NomadExecutor({ address: 'https://nomad.test', fetchFn })
+
+    await executor.spawnRunner({
+      ...spawnOpts,
+      volumes: [
+        { kind: 'scratch', mountPath: '/work', sizeGb: 5 },
+        { kind: 'persistent', name: 'shared', id: 'shared-host-vol', mountPath: '/mnt/shared', mode: 'ro' },
+      ],
+    })
+
+    expect(calls[0]?.body).toMatchObject({
+      Job: {
+        TaskGroups: [
+          {
+            Volumes: { shared: { Type: 'host', Source: 'shared-host-vol', ReadOnly: true } },
+            EphemeralDisk: { SizeMB: 5120 },
+            Tasks: [
+              {
+                VolumeMounts: [{ Volume: 'shared', Destination: '/mnt/shared', ReadOnly: true }],
+              },
+            ],
+          },
+        ],
+      },
+    })
+  })
+
+  it('rejects cache volumes', async () => {
+    const executor = new NomadExecutor({ address: 'https://nomad.test', fetchFn: captureFetch().fetchFn })
+    await expect(
+      executor.spawnRunner({
+        ...spawnOpts,
+        volumes: [{ kind: 'cache', key: 'npm', scope: 'repo', mountPath: '/cache' }],
+      }),
+    ).rejects.toThrow('Nomad: cache volumes are not supported')
+  })
+
+  it('purges the job on destroy and treats 404 as already gone', async () => {
+    const calls: Array<{ url: string; method: string }> = []
+    const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(input), method: init?.method ?? 'GET' })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const executor = new NomadExecutor({ address: 'https://nomad.test', fetchFn })
+    await executor.destroyRunner('stellwerk-github-42-abc')
+    expect(calls[0]).toMatchObject({
+      url: 'https://nomad.test/v1/job/stellwerk-github-42-abc?purge=true',
+      method: 'DELETE',
+    })
   })
 })
 

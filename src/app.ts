@@ -1,6 +1,10 @@
-import { Hono } from 'hono'
+import { OpenAPIHono } from '@hono/zod-openapi'
+import { swaggerUI } from '@hono/swagger-ui'
+import { StreamableHTTPTransport } from '@hono/mcp'
 import type { Executor } from './executor.ts'
 import type { Forge, ForgeKind } from './forge.ts'
+import { createMcpServer, MCP_SERVER_INFO } from './mcp.ts'
+import { healthRoute, listForgesRoute, webhookRoute } from './openapi.ts'
 
 export interface AppDeps {
   forges: Partial<Record<ForgeKind, { forge: Forge; webhookSecret: string }>>
@@ -11,14 +15,22 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps) {
-  const app = new Hono()
+  const app = new OpenAPIHono()
   const log = deps.log ?? defaultLog
 
   app.get('/', (c) => c.text('stellwerk'))
-  app.get('/healthz', (c) => c.json({ ok: true }))
 
-  app.post('/webhook/:forge', async (c) => {
-    const kind = c.req.param('forge') as ForgeKind
+  app.openapi(healthRoute, (c) => c.json({ ok: true as const }, 200))
+
+  app.openapi(listForgesRoute, (c) => {
+    const forges = (Object.keys(deps.forges) as ForgeKind[])
+      .filter((kind) => deps.forges[kind])
+      .map((kind) => ({ kind }))
+    return c.json({ forges }, 200)
+  })
+
+  app.openapi(webhookRoute, async (c) => {
+    const kind = c.req.valid('param').forge
     const entry = deps.forges[kind]
     if (!entry) return c.json({ error: `forge "${kind}" not configured` }, 404)
 
@@ -30,8 +42,8 @@ export function createApp(deps: AppDeps) {
     }
 
     const event = entry.forge.parseJobEvent(body, c.req.raw.headers)
-    if (!event) return c.json({ ignored: true }, 200)
-    if (event.action !== 'queued') return c.json({ ignored: true, action: event.action }, 200)
+    if (!event) return c.json({ ignored: true as const }, 200)
+    if (event.action !== 'queued') return c.json({ ignored: true as const, action: event.action }, 200)
 
     if (!hasAllLabels(event.labels, deps.requiredLabels)) {
       log('job skipped (label mismatch)', {
@@ -40,7 +52,7 @@ export function createApp(deps: AppDeps) {
         jobLabels: event.labels,
         required: deps.requiredLabels,
       })
-      return c.json({ ignored: true, reason: 'label-mismatch' }, 200)
+      return c.json({ ignored: true as const, reason: 'label-mismatch' }, 200)
     }
 
     let registrationToken: string
@@ -67,7 +79,28 @@ export function createApp(deps: AppDeps) {
     }
 
     log('runner spawned', { forge: kind, jobId: event.jobId, runnerId })
-    return c.json({ ok: true, runnerId }, 202)
+    return c.json({ ok: true as const, runnerId }, 202)
+  })
+
+  app.doc('/openapi.json', {
+    openapi: '3.0.0',
+    info: {
+      title: 'Stellwerk',
+      version: MCP_SERVER_INFO.version,
+      description: 'Self-hostable, pluggable compute orchestrator. v0.1 ships ephemeral CI runners for any git forge.',
+    },
+  })
+
+  app.get('/docs', swaggerUI({ url: '/openapi.json' }))
+
+  app.all('/mcp', async (c) => {
+    const server = createMcpServer({
+      listForges: () => (Object.keys(deps.forges) as ForgeKind[]).filter((kind) => deps.forges[kind]),
+    })
+    const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined })
+    await server.connect(transport)
+    const res = await transport.handleRequest(c)
+    return res ?? c.body(null, 204)
   })
 
   return app

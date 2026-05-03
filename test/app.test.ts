@@ -139,6 +139,74 @@ describe('healthz', () => {
   })
 })
 
+describe('GET /forges', () => {
+  it('lists configured forges', async () => {
+    const app = createApp(deps())
+    const res = await app.request('/forges')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ forges: [{ kind: 'github' }] })
+  })
+})
+
+describe('GET /openapi.json', () => {
+  it('serves an OpenAPI document that documents the public routes', async () => {
+    const app = createApp(deps())
+    const res = await app.request('/openapi.json')
+    expect(res.status).toBe(200)
+    const doc = (await res.json()) as {
+      openapi: string
+      info: { title: string }
+      paths: Record<string, Record<string, unknown>>
+    }
+    expect(doc.openapi).toMatch(/^3\./)
+    expect(doc.info.title).toBe('Stellwerk')
+    expect(doc.paths['/healthz']).toHaveProperty('get')
+    expect(doc.paths['/forges']).toHaveProperty('get')
+    expect(doc.paths['/webhook/{forge}']).toHaveProperty('post')
+  })
+})
+
+describe('POST /mcp', () => {
+  async function callMcp<T = unknown>(app: ReturnType<typeof createApp>, body: unknown): Promise<T> {
+    const res = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify(body),
+    })
+    expect(res.status).toBe(200)
+    const text = await res.text()
+    const dataLine = text.split('\n').find((line) => line.startsWith('data: '))
+    if (!dataLine) throw new Error(`no data line in SSE response: ${text}`)
+    return JSON.parse(dataLine.slice('data: '.length)) as T
+  }
+
+  it('lists tools mirroring the REST surface', async () => {
+    const app = createApp(deps())
+    const payload = await callMcp<{ result: { tools: { name: string }[] } }>(app, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+    })
+    const names = payload.result.tools.map((t) => t.name).sort()
+    expect(names).toEqual(['health', 'list_forges'])
+  })
+
+  it('exposes list_forges that mirrors GET /forges', async () => {
+    const app = createApp(deps())
+    const payload = await callMcp<{ result: { content: { type: string; text: string }[] } }>(app, {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: { name: 'list_forges', arguments: {} },
+    })
+    const text = payload.result.content[0]?.text ?? ''
+    expect(JSON.parse(text)).toEqual({ forges: [{ kind: 'github' }] })
+  })
+})
+
 describe('vi smoke', () => {
   it('vitest is wired', () => {
     expect(vi).toBeDefined()

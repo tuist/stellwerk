@@ -12,7 +12,7 @@ The architecture is structured around a pluggable `Executor` abstraction. Becaus
 Two things are pluggable today:
 
 - **The forge.** GitHub Actions, GitLab CI, and Codeberg Actions are supported. Gitea/Forgejo support can build on the Codeberg implementation.
-- **The compute backend.** Fly Machines for zero-infra, a Docker agent for BYO VPS, more on the roadmap.
+- **The compute backend.** Fly Machines for zero-infra, a Docker agent for BYO VPS, Kubernetes for existing clusters, AWS ECS, and GCP Batch.
 
 The metaphor: a *Stellwerk* is a railway interlocking signal box. It doesn't run the trains — it routes them. And it doesn't care which railway operator owns the train, or whether the train is a CI job or a sandbox request.
 
@@ -31,7 +31,7 @@ Stellwerk targets the gap: a Kubernetes-free runner orchestrator that ships with
 ### Goals
 
 - **Five-minute setup.** Clone, set secrets, deploy, configure webhook on the forge side, done.
-- **Zero infra requirement.** With Fly + Cloudflare, the user never SSHes into anything.
+- **Zero infra requirement.** With Fly + Cloudflare, the user never SSHes into anything. Users with existing cloud or cluster infrastructure can bring it through another executor.
 - **Forge-agnostic architecture.** New forges plug in via a `Forge` interface (~3 methods).
 - **Pluggable executors.** New compute backends plug in via an `Executor` interface (~2 methods).
 - **Runtime-agnostic control plane.** Same source runs on Cloudflare Workers, Node, Bun, Deno, Docker. No `node:` imports, no platform-specific crypto.
@@ -40,7 +40,7 @@ Stellwerk targets the gap: a Kubernetes-free runner orchestrator that ships with
 
 ### Non-goals
 
-- **Not a Kubernetes operator.** If users want K8s, they should use the official chart for their forge.
+- **Not a Kubernetes operator.** The Kubernetes executor creates short-lived Jobs through the Kubernetes API, but Stellwerk does not install controllers, CRDs, or reconcile cluster state like ARC.
 - **Not a multi-tenant SaaS.** Each user deploys their own Stellwerk.
 - **Not (yet) a code-execution sandbox.** v0.1–v0.3 is CI-runner only. The generic sandbox API for AI workflows is the v1 direction (§16). It shares executors with the CI runner story but ships as a separate module on the same codebase, with its own SDK and docs.
 - **Not a workflow engine.** The forge is the workflow engine. We just provide runners.
@@ -162,10 +162,22 @@ export interface SpawnOpts {
   labels: string[]
   jobId: string
   forge: 'github' | 'gitlab' | 'gitea' | 'codeberg'  // determines which runner image to boot
+  volumes?: RunnerVolume[]
 }
 ```
 
 The executor receives everything it needs to boot a runner. It does not care about webhooks or token lifecycles. It does need the forge value to pick the right runner image.
+
+Optional volumes are provider-neutral:
+
+```ts
+type RunnerVolume =
+  | { kind: 'scratch'; name?: string; mountPath: string; sizeGb?: number }
+  | { kind: 'cache'; name?: string; mountPath: string; key: string; scope?: 'repo' | 'org' | 'pool'; sizeGb?: number; mode?: VolumeMode }
+  | { kind: 'persistent'; name?: string; mountPath: string; id: string; sizeGb?: number; mode?: VolumeMode }
+```
+
+`scratch` is per-job disposable state. `cache` is provider-managed reusable state scoped by key. `persistent` is an explicit provider resource ID supplied by the operator. Shared writable mounts are opt-in because they weaken the fresh-runner isolation model.
 
 ### 5.5 Executor backends
 
@@ -182,8 +194,24 @@ The executor receives everything it needs to boot a runner. It does not care abo
 - Cold-start: <1s (image cached locally).
 - v0 may use plain HTTP with bearer auth before introducing WebSockets.
 
+#### `KubernetesExecutor`
+- Calls the Kubernetes API directly with `fetch`; it does not shell out to `kubectl`.
+- Creates a Secret for runner environment, then a `batch/v1` Job with `restartPolicy: Never`, `backoffLimit: 0`, and `ttlSecondsAfterFinished`.
+- Maps `scratch` to `emptyDir`, `cache` to stable PVC names, and `persistent` to existing PVCs.
+
+#### `AwsEcsExecutor`
+- Signs ECS JSON API calls with Web Crypto SigV4.
+- Registers a short-lived task definition per spawn so the executor can choose the right runner image, then calls `RunTask`.
+- Uses Fargate by default, but can target other ECS launch types.
+- Maps `scratch` and non-EFS `persistent` mounts to configured-at-launch EBS volumes. Maps `persistent.id` beginning with `fs-` to EFS.
+
+#### `GcpBatchExecutor`
+- Uses Google service-account JWT auth or a supplied access token.
+- Calls the GCP Batch Jobs API to create one single-task container job per runner.
+- Maps `scratch` to a new persistent disk, `cache` to GCS FUSE using a configured cache bucket, and `persistent` to existing persistent disks, GCS paths, or NFS.
+
 #### Future
-- `HetznerCloudExecutor`, `Ec2Executor`, `GceExecutor`, `KubernetesExecutor`. ~30 lines each.
+- `HetznerCloudExecutor`, `Ec2Executor`, `GceExecutor`, Azure executors.
 
 ### 5.6 Runner images
 
@@ -215,6 +243,9 @@ Per-forge equivalents (GitLab Project Access Token setup, Gitea PAT setup) will 
 The portability story rests on two facts: (a) Hono is runtime-agnostic, (b) the control plane only uses standard Web APIs (`fetch`, `crypto.subtle`, `atob`, `btoa`, `TextEncoder`).
 
 ### 6.1 Cloudflare Workers (recommended)
+
+The recommended setup path is the Deploy to Cloudflare button. `wrangler.toml` declares safe defaults in `[vars]`, deploys to `workers.dev`, and declares the default GitHub + Fly secret names in `[secrets].required`. `.dev.vars.example` mirrors those secret names so Cloudflare's deploy flow can prompt for them.
+
 ```sh
 wrangler deploy
 ```
@@ -332,8 +363,8 @@ In rough priority order:
 5. **`HetznerCloudExecutor`** — cheapest option for users with steady load.
 6. **Web dashboard** at `GET /` — list active runners, recent jobs, errors.
 7. **Multi-pool support** — one Stellwerk deployment serving multiple label-pools with different executors and/or different forges.
-8. **`KubernetesExecutor`** — for users who do have a cluster.
-9. **`Ec2Executor` / `GceExecutor`.**
+8. **`Ec2Executor` / `GceExecutor`** for VM-native privileged Docker builds.
+9. **Azure executors** (`Container Apps Jobs`, `Batch`, or VM Scale Sets).
 10. **WebSocket-based agent protocol** (replaces HTTP-polling agent).
 11. **Runner image variants** (`slim`, `dind`, language-specific) per forge.
 12. **ARM runners, GPU runners.**

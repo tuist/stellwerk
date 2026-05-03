@@ -1,4 +1,6 @@
+import { StreamableHTTPTransport } from '@hono/mcp'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { Context } from 'hono'
 import type { ForgeKind } from './forge.ts'
 
 export interface McpDeps {
@@ -38,4 +40,14 @@ export function createMcpServer(deps: McpDeps): McpServer {
   )
 
   return server
+}
+
+export function createMcpHttpHandler(deps: McpDeps): (c: Context) => Promise<Response> {
+  return async (c) => {
+    const server = createMcpServer(deps)
+    const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined })
+    await server.connect(transport)
+    const res = await transport.handleRequest(c)
+    return res ?? c.body(null, 204)
+  }
 }

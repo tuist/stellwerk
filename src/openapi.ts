@@ -1,4 +1,6 @@
-import { createRoute, z } from '@hono/zod-openapi'
+import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { swaggerUI } from '@hono/swagger-ui'
+import { MCP_SERVER_INFO } from './mcp.ts'
 
 export const ForgeKindSchema = z.enum(['github', 'gitlab', 'gitea', 'codeberg']).openapi('ForgeKind')
 
@@ -69,3 +71,15 @@ export const webhookRoute = createRoute({
     502: { description: 'Forge or executor failure', ...jsonContent(ErrorSchema) },
   },
 })
+
+export function mountOpenApiDocs(app: OpenAPIHono): void {
+  app.doc('/openapi.json', {
+    openapi: '3.0.0',
+    info: {
+      title: 'Stellwerk',
+      version: MCP_SERVER_INFO.version,
+      description: 'Self-hostable, pluggable compute orchestrator. v0.1 ships ephemeral CI runners for any git forge.',
+    },
+  })
+  app.get('/docs', swaggerUI({ url: '/openapi.json' }))
+}

@@ -11,15 +11,17 @@ Stellwerk is a small, runtime-agnostic control plane (Hono) that orchestrates ep
 ## Repository map
 
 - `src/` — control plane source.
-  - `app.ts` — Hono app factory (`createApp(deps)`); injectable for tests.
+  - `app.ts` — thin assembler. `createApp(deps)` wires the routes, MCP transport, and OpenAPI docs together.
   - `config.ts` — env → `AppDeps` wiring.
   - `index.ts` — Cloudflare Workers entry.
   - `server.node.ts` — Node entry (`@hono/node-server`).
   - `forge.ts` / `executor.ts` — public interfaces.
   - `forges/` — forge implementations (one file per forge).
   - `executors/` — compute backends.
-  - `openapi.ts` — Zod schemas + `createRoute()` definitions for the public REST surface. The OpenAPI document is generated from these, served at `/openapi.json`, and rendered by Swagger UI at `/docs`.
-  - `mcp.ts` — `createMcpServer(deps)` factory. Exposes the same client capabilities as the REST API, mounted at `/mcp` over Streamable HTTP.
+  - `openapi.ts` — Zod schemas + `createRoute()` definitions for the public REST surface, plus `mountOpenApiDocs(app)` for `/openapi.json` and Swagger UI at `/docs`.
+  - `mcp.ts` — `createMcpServer(deps)` and `createMcpHttpHandler(deps)` (Streamable HTTP transport plumbing). Mounted at `/mcp`.
+  - `webhook.ts` — `createWebhookHandler(deps)` for `POST /webhook/{forge}`. Owns the invariants below.
+  - `log.ts` — `Logger` type and `defaultLog` (structured JSON line writer).
   - `util/` — base64url, hex, HMAC verify, RS256 JWT — Web-Crypto only.
 - `runner-images/` — per-forge Docker images for the runner VM.
 - `test/` — vitest tests. Test files are colocated by concern, not by source path.

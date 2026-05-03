@@ -1,0 +1,95 @@
+name: Stellwerk
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stellwerk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install tooling with mise
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
+
+      - name: Restore aube store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aube/store
+          key: aube-store-${{ runner.os }}-${{ hashFiles('aube-lock.yaml') }}
+          restore-keys: |
+            aube-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: aube ci
+
+      - name: Run typecheck
+        run: aube run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install tooling with mise
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
+
+      - name: Restore aube store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aube/store
+          key: aube-store-${{ runner.os }}-${{ hashFiles('aube-lock.yaml') }}
+          restore-keys: |
+            aube-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: aube ci
+
+      - name: Run Node tests
+        run: aube run test
+
+      - name: Run Cloudflare runtime tests
+        run: aube run test:cf
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install tooling with mise
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
+
+      - name: Restore aube store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/aube/store
+          key: aube-store-${{ runner.os }}-${{ hashFiles('aube-lock.yaml') }}
+          restore-keys: |
+            aube-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: aube ci
+
+      - name: Check formatting
+        run: aube run format:check

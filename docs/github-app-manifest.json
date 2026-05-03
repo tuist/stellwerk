@@ -1,0 +1,17 @@
+{
+  "name": "Stellwerk Runners",
+  "url": "https://github.com/tuist/stellwerk",
+  "hook_attributes": {
+    "url": "https://REPLACE-ME.workers.dev/webhook/github"
+  },
+  "redirect_url": "https://REPLACE-ME.workers.dev/setup/github/callback",
+  "public": false,
+  "default_permissions": {
+    "actions": "read",
+    "administration": "write",
+    "metadata": "read"
+  },
+  "default_events": [
+    "workflow_job"
+  ]
+}

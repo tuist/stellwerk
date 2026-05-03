@@ -10,7 +10,7 @@ The architecture is structured around a pluggable `Executor` abstraction. Becaus
 
 Two things are pluggable today:
 
-- **The forge.** GitHub Actions is the v0.1 target. GitLab CI and Gitea Actions are on the roadmap.
+- **The forge.** GitHub Actions, GitLab CI, and Codeberg Actions are supported. Gitea/Forgejo support can build on the Codeberg implementation.
 - **The compute backend.** Fly Machines for zero-infra, a Docker agent for BYO VPS, more on the roadmap.
 
 The metaphor: a *Stellwerk* is a railway interlocking signal box. It doesn't run the trains — it routes them. And it doesn't care which railway operator owns the train, or whether the train is a CI job or a sandbox request.
@@ -82,9 +82,9 @@ Three moving parts:
 
 ### 5.1 Control plane (`src/index.ts`)
 
-Hono app. One webhook route per forge: `POST /webhook/github`, `POST /webhook/gitlab`, `POST /webhook/gitea`. Each route resolves the right `Forge` implementation, calls `verifyWebhook()` and `parseJobEvent()`, then on a queued job mints a token and calls the configured executor.
+Hono app. One webhook route per forge: `POST /webhook/github`, `POST /webhook/gitlab`, `POST /webhook/codeberg`. Each route resolves the right `Forge` implementation, calls `verifyWebhook()` and `parseJobEvent()`, then on a queued job mints a token and calls the configured executor.
 
-Label filtering: `RUNNER_LABELS` env var is a comma-separated list. Only jobs whose `runs-on` (GitHub/Gitea) or `tags` (GitLab) include all configured labels get a runner. This lets multiple Stellwerk pools serve the same repo with different runner classes (e.g. one pool for `linux-x64-fast`, another for `gpu`).
+Label filtering: `RUNNER_LABELS` env var is a comma-separated list. Only jobs whose `runs-on` (GitHub/Codeberg) or configured GitLab runner tags include all configured labels get a runner. This lets multiple Stellwerk pools serve the same repo with different runner classes (e.g. one pool for `linux-x64-fast`, another for `gpu`).
 
 ### 5.2 Forge interface (`src/forge.ts`)
 
@@ -96,8 +96,8 @@ export interface Forge {
   /** Parse a raw webhook payload into a normalized event, or null to ignore. */
   parseJobEvent(body: string, headers: Headers): JobEvent | null
 
-  /** Mint a single-use, short-TTL runner registration token for the job's scope. */
-  mintRunnerToken(scope: JobScope): Promise<string>
+  /** Mint or fetch a runner registration token for the job's scope. */
+  mintRunnerToken(scope: JobScope, labels: string[]): Promise<string>
 }
 
 export interface JobEvent {
@@ -106,13 +106,14 @@ export interface JobEvent {
   scope: JobScope
   labels: string[]
   repoUrl: string
+  forgeUrl?: string
 }
 
 export interface JobScope {
-  forge: 'github' | 'gitlab' | 'gitea'
+  forge: 'github' | 'gitlab' | 'gitea' | 'codeberg'
   installationId?: string  // GitHub: app installation ID
   projectId?: string       // GitLab: project ID
-  repoFullName?: string    // GitHub/Gitea: "owner/repo"
+  repoFullName?: string    // GitHub/Codeberg/Gitea: "owner/repo"
 }
 ```
 
@@ -126,17 +127,17 @@ The forge translates platform-specific webhooks and auth flows into this normali
 - Runner binary: `actions-runner`, with `--ephemeral` flag.
 - Setup: user creates a GitHub App via the [App Manifest one-click flow](https://docs.github.com/en/apps/creating-github-apps/setting-up-a-github-app-from-a-manifest).
 
-#### `GitlabForge` — planned, v0.2
+#### `GitlabForge`
 - Webhook event: Job Hook (`object_kind: "build"`).
-- Auth: a Project Access Token or Group Access Token. No JWT dance — much simpler than GitHub.
-- Runner binary: `gitlab-runner`, configured with `--max-builds 1` (GitLab's equivalent of ephemeral).
-- Setup: user creates an access token in GitLab UI, configures the project/group webhook URL.
+- Auth: a Project, Group, or Personal Access Token with `manage_runner`.
+- Runner binary: `gitlab-runner`, configured with `--max-builds 1` and best-effort runner cleanup.
+- Setup: user creates an access token in GitLab UI, configures a project/group Job Hook.
 
-#### `GiteaForge` — planned, v0.3
-- Webhook event: `workflow_job` (Gitea explicitly mirrors GitHub Actions semantics).
-- Auth: Personal Access Token (Gitea has no app concept).
-- Runner binary: `act_runner`, the Gitea fork of actions-runner.
-- Should be the easiest second forge to add — much can be reused from `GithubForge`.
+#### `CodebergForge`
+- Webhook event: Forgejo `workflow_job`.
+- Auth: Codeberg/Forgejo access token for runner registration tokens, or a static runner registration token from the UI.
+- Runner binary: `forgejo-runner`, using `one-job`.
+- Setup: user enables Actions, creates a Forgejo webhook, and configures runner registration token access.
 
 #### `BitbucketForge` — someday, low priority
 - Bitbucket has self-hosted runners with their own binary and OAuth flow. Add if requested.
@@ -156,9 +157,10 @@ export interface Executor {
 export interface SpawnOpts {
   registrationToken: string
   repoUrl: string
+  forgeUrl?: string
   labels: string[]
   jobId: string
-  forge: 'github' | 'gitlab' | 'gitea'  // determines which runner image to boot
+  forge: 'github' | 'gitlab' | 'gitea' | 'codeberg'  // determines which runner image to boot
 }
 ```
 
@@ -169,7 +171,7 @@ The executor receives everything it needs to boot a runner. It does not care abo
 #### `FlyExecutor`
 - Calls `POST /v1/apps/{app}/machines` on the Fly Machines API.
 - `auto_destroy: true` so the VM deletes itself when the runner exits.
-- Picks the runner image based on `opts.forge` (resolves to `runner-github`, `runner-gitlab`, or `runner-gitea`).
+- Picks the runner image based on `opts.forge` (resolves to `runner-github`, `runner-gitlab`, `runner-codeberg`, or `runner-gitea`).
 - Default size: shared-cpu-1x, 2 vCPU, 2 GB RAM. Configurable.
 - Cold-start: ~1–3s. Pay-per-second.
 

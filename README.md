@@ -13,13 +13,13 @@ v0.1 alpha: GitHub Actions, GitLab CI, and Codeberg Actions on Fly Machines, a s
 
 ## 🚀 Deploy to Cloudflare
 
-The fastest path is the Deploy to Cloudflare button above. The default deployment is GitHub Actions on Fly Machines.
+The fastest path is the **Deploy to Cloudflare** button above. The button reads `wrangler.toml`, which ships with a working default (GitHub forge on Fly Machines) so the deploy flow has something to prompt for. Any forge + executor combination is supported — see [Configuration](#-configuration) for the variables each one needs, and edit `wrangler.toml` (`[vars]` and `[secrets].required`) before clicking the button if you want a different combination.
 
 Before deploying:
 
-1. Create the Fly app that will hold runner Machines. The default `wrangler.toml` uses `FLY_APP=stellwerk-runners`; change that var if your Fly app uses another name.
-2. Create the GitHub App from `docs/github-app-manifest.json`. Set its webhook URL to `https://<your-worker>.<your-subdomain>.workers.dev/webhook/github`, set a random webhook secret, install it on the repos, and generate a private key.
-3. Click **Deploy to Cloudflare** and provide the prompted Worker secrets from `.dev.vars.example`: `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, and `FLY_API_TOKEN`.
+1. Provision the compute backend for your chosen executor (Fly app, Docker agent endpoint, Kubernetes namespace, ECS cluster, GCP Batch project, …).
+2. Configure your forge (GitHub App, GitLab token, or Codeberg token) and point its webhook at `https://<your-worker>.<your-subdomain>.workers.dev/webhook/<forge>`. For GitHub specifically, you can create the App from `docs/github-app-manifest.json`.
+3. Click **Deploy to Cloudflare** and provide the prompted Worker secrets matching the forge + executor variables in `wrangler.toml`.
 
 Then use the runner in a workflow:
 
@@ -36,6 +36,8 @@ git clone https://github.com/tuist/stellwerk.git && cd stellwerk
 mise install
 aube install
 
+# Push the secrets your forge + executor combination requires.
+# Defaults shown below — adjust for GitLab/Codeberg or a non-Fly executor.
 wrangler secret put GITHUB_APP_ID
 wrangler secret put GITHUB_APP_PRIVATE_KEY
 wrangler secret put GITHUB_WEBHOOK_SECRET

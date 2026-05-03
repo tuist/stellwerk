@@ -5,15 +5,11 @@
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/tuist/stellwerk)
 
-A small Hono-based control plane that provisions ephemeral compute on demand. The executor abstraction is workload-agnostic — the same primitive that boots a CI runner can boot a sandbox for an AI agent — so Stellwerk is a general orchestrator with CI as its first shipped use case. Stateless. Webhook-driven. Runs on Cloudflare Workers, Node, Bun, Deno, or in Docker from the same source.
-
-**Today (v0.1):** CI runner orchestrator. Watches a git forge for queued jobs and spawns short-lived self-hosted runners on Fly Machines, a Docker agent, Kubernetes, AWS ECS, or GCP Batch.
-
-**Next:** sandbox API for AI agents, reusing the same forges-and-executors plumbing. See [`SPEC.md`](./SPEC.md) for the full direction.
+A small Hono-based control plane that provisions ephemeral compute on demand. The executor abstraction is workload-agnostic, so the same primitive that boots a CI runner can boot a sandbox for an AI agent. Stellwerk is a general orchestrator, with CI runners as its first shipped use case and a sandbox API for AI agents on the roadmap. Stateless. Webhook-driven. Runs on Cloudflare Workers, Node, Bun, Deno, or in Docker from the same source. See [`SPEC.md`](./SPEC.md) for the full direction.
 
 ## 🚀 Deploy to Cloudflare
 
-The fastest path is the **Deploy to Cloudflare** button above. The button reads `wrangler.toml`, which ships with a working default (GitHub forge on Fly Machines) so the deploy flow has something to prompt for. Any forge + executor combination is supported — see [Configuration](#-configuration) for the variables each one needs, and edit `wrangler.toml` (`[vars]` and `[secrets].required`) before clicking the button if you want a different combination.
+The fastest path is the **Deploy to Cloudflare** button above. The button reads `wrangler.toml`, which ships with a working default (GitHub forge on Fly Machines) so the deploy flow has something to prompt for. Any forge + executor combination is supported. See [Configuration](#-configuration) for the variables each one needs, and edit `wrangler.toml` (`[vars]` and `[secrets].required`) before clicking the button if you want a different combination.
 
 Before deploying:
 
@@ -37,7 +33,7 @@ mise install
 aube install
 
 # Push the secrets your forge + executor combination requires.
-# Defaults shown below — adjust for GitLab/Codeberg or a non-Fly executor.
+# Defaults shown below; adjust for GitLab/Codeberg or a non-Fly executor.
 wrangler secret put GITHUB_APP_ID
 wrangler secret put GITHUB_APP_PRIVATE_KEY
 wrangler secret put GITHUB_WEBHOOK_SECRET
@@ -86,7 +82,7 @@ Stellwerk enables a forge whenever the variables below are present, so one deplo
 
 #### Codeberg
 
-`CODEBERG_ACCESS_TOKEN` and `CODEBERG_RUNNER_REGISTRATION_TOKEN` are alternatives — set one or the other.
+`CODEBERG_ACCESS_TOKEN` and `CODEBERG_RUNNER_REGISTRATION_TOKEN` are alternatives; set one or the other.
 
 | Var                                  | Required | Purpose                                      |
 | ------------------------------------ | -------- | -------------------------------------------- |

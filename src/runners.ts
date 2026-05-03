@@ -1,5 +1,5 @@
 import type { RouteHandler } from '@hono/zod-openapi'
-import type { Executor } from './executor.ts'
+import type { Executor, RunnerVolume } from './executor.ts'
 import type { Forge, ForgeKind, JobScope } from './forge.ts'
 import type { Logger } from './log.ts'
 import type { destroyRunnerRoute, spawnRunnerRoute } from './openapi.ts'
@@ -7,6 +7,7 @@ import type { destroyRunnerRoute, spawnRunnerRoute } from './openapi.ts'
 export interface RunnerDeps {
   forges: Partial<Record<ForgeKind, { forge: Forge; webhookSecret: string }>>
   executor: Executor
+  runnerVolumes?: RunnerVolume[]
   log: Logger
 }
 
@@ -51,6 +52,7 @@ export async function provisionRunner(deps: RunnerDeps, req: SpawnRunnerRequest)
       forgeUrl: req.forgeUrl,
       labels: req.labels,
       jobId,
+      volumes: deps.runnerVolumes,
     })
   } catch (err) {
     deps.log('executor spawn failed', { forge: req.forge, jobId, error: String(err) })

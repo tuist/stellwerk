@@ -1,5 +1,6 @@
-import type { Executor, SpawnOpts } from '../executor.ts'
+import type { Executor, RunnerVolume, SpawnOpts } from '../executor.ts'
 import type { ForgeKind } from '../forge.ts'
+import { runnerEnv, runnerImage } from './common.ts'
 
 export interface FlyExecutorOptions {
   apiToken: string
@@ -13,19 +14,23 @@ export interface FlyExecutorOptions {
   memoryMb?: number
   /** Override for testing. */
   apiBaseUrl?: string
+  fetchFn?: typeof fetch
 }
 
 const DEFAULT_API = 'https://api.machines.dev'
 
 export class FlyExecutor implements Executor {
   private readonly apiBase: string
+  private readonly fetchFn: typeof fetch
 
   constructor(private readonly opts: FlyExecutorOptions) {
     this.apiBase = opts.apiBaseUrl ?? DEFAULT_API
+    this.fetchFn = opts.fetchFn ?? fetch
   }
 
   async spawnRunner(opts: SpawnOpts): Promise<string> {
     const url = `${this.apiBase}/v1/apps/${this.opts.app}/machines`
+    const mounts = flyMounts(opts.volumes ?? [])
     const body = {
       region: this.opts.region,
       config: {
@@ -37,17 +42,11 @@ export class FlyExecutor implements Executor {
           memory_mb: this.opts.memoryMb ?? 2048,
         },
         image: this.imageFor(opts.forge),
-        env: {
-          RUNNER_TOKEN: opts.registrationToken,
-          RUNNER_REPO_URL: opts.repoUrl,
-          ...(opts.forgeUrl ? { RUNNER_FORGE_URL: opts.forgeUrl } : {}),
-          RUNNER_LABELS: opts.labels.join(','),
-          RUNNER_JOB_ID: opts.jobId,
-          STELLWERK_FORGE: opts.forge,
-        },
+        env: runnerEnv(opts),
+        ...(mounts.length > 0 ? { mounts } : {}),
       },
     }
-    const res = await fetch(url, {
+    const res = await this.fetchFn(url, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.opts.apiToken}`,
@@ -64,7 +63,7 @@ export class FlyExecutor implements Executor {
 
   async destroyRunner(id: string): Promise<void> {
     const url = `${this.apiBase}/v1/apps/${this.opts.app}/machines/${id}?force=true`
-    const res = await fetch(url, {
+    const res = await this.fetchFn(url, {
       method: 'DELETE',
       headers: { authorization: `Bearer ${this.opts.apiToken}` },
     })
@@ -74,8 +73,22 @@ export class FlyExecutor implements Executor {
   }
 
   private imageFor(forge: ForgeKind): string {
-    return (
-      this.opts.imageOverrides?.[forge] ?? `${this.opts.imageNamespace ?? 'ghcr.io/stellwerk'}/runner-${forge}:latest`
-    )
+    return runnerImage(this.opts, forge)
   }
+}
+
+function flyMounts(volumes: RunnerVolume[]): Array<{ volume: string; path: string }> {
+  const persistent = volumes.filter((volume) => volume.kind === 'persistent')
+  if (persistent.length > 1) {
+    throw new Error('Fly: only one persistent volume can be mounted per Machine')
+  }
+  if (volumes.some((volume) => volume.kind === 'cache')) {
+    throw new Error('Fly: cache volumes are not shared; use a persistent rw-exclusive volume id')
+  }
+  return persistent.map((volume) => {
+    if (volume.mode === 'rw-shared') {
+      throw new Error('Fly: volumes cannot be mounted rw-shared')
+    }
+    return { volume: volume.id, path: volume.mountPath }
+  })
 }

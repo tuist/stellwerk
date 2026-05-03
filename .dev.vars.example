@@ -1,0 +1,7 @@
+# GitHub + Fly is the default Deploy to Cloudflare path.
+# These are Worker secrets. Do not commit a populated .dev.vars file.
+
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_WEBHOOK_SECRET=
+FLY_API_TOKEN=

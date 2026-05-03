@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { Executor } from './executor.ts'
+import type { Executor, RunnerVolume } from './executor.ts'
 import type { Forge, ForgeKind } from './forge.ts'
 
 export interface AppDeps {
@@ -7,6 +7,7 @@ export interface AppDeps {
   executor: Executor
   /** Labels every job must include to be picked up. Empty = match anything. */
   requiredLabels: string[]
+  runnerVolumes?: RunnerVolume[]
   log?: (msg: string, fields?: Record<string, unknown>) => void
 }
 
@@ -60,6 +61,7 @@ export function createApp(deps: AppDeps) {
         forgeUrl: event.forgeUrl,
         labels: event.labels,
         jobId: event.jobId,
+        volumes: deps.runnerVolumes,
       })
     } catch (err) {
       log('executor spawn failed', { forge: kind, jobId: event.jobId, error: String(err) })

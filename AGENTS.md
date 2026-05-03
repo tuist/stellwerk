@@ -21,6 +21,7 @@ Stellwerk is a small, runtime-agnostic control plane (Hono) that orchestrates ep
   - `openapi.ts` — Zod schemas + `createRoute()` definitions for the public REST surface, plus `mountOpenApiDocs(app)` for `/openapi.json` and Swagger UI at `/docs`.
   - `mcp.ts` — `createMcpServer(deps)` and `createMcpHttpHandler(deps)` (Streamable HTTP transport plumbing). Mounted at `/mcp`.
   - `webhook.ts` — `createWebhookHandler(deps)` for `POST /webhook/{forge}`. Owns the invariants below.
+  - `runners.ts` — `provisionRunner` / `destroyRunner` (forge-aware mint + spawn) and the REST handlers for `POST /runners` and `DELETE /runners/{id}`. Same operations are exposed as MCP tools.
   - `log.ts` — `Logger` type and `defaultLog` (structured JSON line writer).
   - `util/` — base64url, hex, HMAC verify, RS256 JWT — Web-Crypto only.
 - `runner-images/` — per-forge Docker images for the runner VM.

@@ -22,6 +22,29 @@ export const WebhookIgnoredSchema = z
   })
   .openapi('WebhookIgnored')
 
+export const JobScopeSchema = z
+  .object({
+    installationId: z.string().optional(),
+    projectId: z.string().optional(),
+    repoFullName: z.string().optional(),
+  })
+  .openapi('JobScope')
+
+export const SpawnRunnerRequestSchema = z
+  .object({
+    forge: ForgeKindSchema,
+    scope: JobScopeSchema,
+    repoUrl: z.string(),
+    labels: z.array(z.string()),
+    forgeUrl: z.string().optional(),
+    jobId: z.string().optional(),
+  })
+  .openapi('SpawnRunnerRequest')
+
+export const SpawnRunnerResponseSchema = z
+  .object({ runnerId: z.string(), jobId: z.string() })
+  .openapi('SpawnRunnerResponse')
+
 const jsonContent = <T extends z.ZodTypeAny>(schema: T) => ({
   content: { 'application/json': { schema } },
 })
@@ -69,6 +92,39 @@ export const webhookRoute = createRoute({
     401: { description: 'Invalid signature', ...jsonContent(ErrorSchema) },
     404: { description: 'Forge not configured', ...jsonContent(ErrorSchema) },
     502: { description: 'Forge or executor failure', ...jsonContent(ErrorSchema) },
+  },
+})
+
+export const spawnRunnerRoute = createRoute({
+  method: 'post',
+  path: '/runners',
+  tags: ['runners'],
+  summary: 'Spawn a runner',
+  description:
+    'Mints a runner registration token via the configured forge and asks the executor to boot a runner. The same flow the webhook uses, exposed for clients that want to provision a runner outside of a forge event.',
+  request: {
+    body: {
+      required: true,
+      content: { 'application/json': { schema: SpawnRunnerRequestSchema } },
+    },
+  },
+  responses: {
+    202: { description: 'Runner spawned', ...jsonContent(SpawnRunnerResponseSchema) },
+    404: { description: 'Forge not configured', ...jsonContent(ErrorSchema) },
+    502: { description: 'Forge or executor failure', ...jsonContent(ErrorSchema) },
+  },
+})
+
+export const destroyRunnerRoute = createRoute({
+  method: 'delete',
+  path: '/runners/{id}',
+  tags: ['runners'],
+  summary: 'Destroy a runner',
+  description: 'Asks the executor to destroy a previously-spawned runner. Idempotent on the executor side.',
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    204: { description: 'Runner destroyed' },
+    502: { description: 'Executor failure', ...jsonContent(ErrorSchema) },
   },
 })
 

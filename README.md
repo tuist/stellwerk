@@ -51,38 +51,136 @@ Each queued job with matching labels gets its own runner. With `EXECUTOR=fly`, S
 
 All configuration is environment-driven. On Cloudflare these are `vars` + `secrets`; on Node they're regular env vars.
 
-| Var                       | Required when           | Purpose                                       |
-| ------------------------- | ----------------------- | --------------------------------------------- |
-| `EXECUTOR`                | always (default `fly`)  | `fly` \| `docker-agent` \| `kubernetes` \| `aws-ecs` \| `gcp-batch` |
-| `RUNNER_LABELS`           | optional                | Comma-separated labels every job must include |
-| `RUNNER_IMAGE_NAMESPACE`  | optional                | Image namespace for `runner-<forge>:latest`   |
-| `RUNNER_VOLUMES`          | optional                | JSON array of scratch/cache/persistent mounts |
-| `GITHUB_APP_ID`           | GitHub forge            | App ID                                        |
-| `GITHUB_APP_PRIVATE_KEY`  | GitHub forge            | PEM (PKCS#1 or PKCS#8)                        |
-| `GITHUB_WEBHOOK_SECRET`   | GitHub forge            | Webhook HMAC secret                           |
-| `GITLAB_ACCESS_TOKEN`     | GitLab forge            | Token with `manage_runner` scope              |
-| `GITLAB_WEBHOOK_SECRET`   | GitLab forge            | Webhook signing or secret token               |
-| `GITLAB_BASE_URL`         | optional                | GitLab instance URL (default `gitlab.com`)    |
-| `GITLAB_RUNNER_TAGS`      | optional                | Runner tags (defaults to `RUNNER_LABELS`)     |
-| `CODEBERG_ACCESS_TOKEN`   | Codeberg forge          | Token for repo runner registration tokens     |
-| `CODEBERG_RUNNER_REGISTRATION_TOKEN` | Codeberg forge | Static runner registration token alternative |
-| `CODEBERG_WEBHOOK_SECRET` | Codeberg forge          | Forgejo webhook secret                        |
-| `CODEBERG_SERVER_URL`     | optional                | Forgejo server URL (default Codeberg)         |
-| `FLY_API_TOKEN`           | `EXECUTOR=fly`          | Fly Machines API token                        |
-| `FLY_APP`                 | `EXECUTOR=fly`          | Fly app used for runner machines              |
-| `FLY_REGION`              | optional                | Fly region (defaults to app default)          |
-| `AGENT_URL`               | `EXECUTOR=docker-agent` | URL of `stellwerk-agent`                      |
-| `AGENT_TOKEN`             | `EXECUTOR=docker-agent` | Bearer token for the agent                    |
+### Common
 
-Executor-specific variables:
+| Var                      | Required when          | Purpose                                       |
+| ------------------------ | ---------------------- | --------------------------------------------- |
+| `EXECUTOR`               | always (default `fly`) | One of the executors below                    |
+| `RUNNER_LABELS`          | optional               | Comma-separated labels every job must include |
+| `RUNNER_IMAGE_NAMESPACE` | optional               | Image namespace for `runner-<forge>:latest`   |
+| `RUNNER_VOLUMES`         | optional               | JSON array of scratch/cache/persistent mounts |
 
-- `EXECUTOR=kubernetes`: `K8S_API_SERVER`, `K8S_NAMESPACE`, `K8S_BEARER_TOKEN`; optional `K8S_SERVICE_ACCOUNT`, `K8S_IMAGE_PULL_SECRET`, `K8S_JOB_PREFIX`, `K8S_CACHE_CLAIM_PREFIX`, `K8S_TTL_SECONDS_AFTER_FINISHED`, `K8S_CPU_REQUEST`, `K8S_MEMORY_REQUEST`, `K8S_CPU_LIMIT`, `K8S_MEMORY_LIMIT`.
-- `EXECUTOR=aws-ecs`: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ECS_CLUSTER`, `AWS_ECS_SUBNETS`, `AWS_ECS_EXECUTION_ROLE_ARN`; optional `AWS_SESSION_TOKEN`, `AWS_ECS_SECURITY_GROUPS`, `AWS_ECS_ASSIGN_PUBLIC_IP`, `AWS_ECS_TASK_ROLE_ARN`, `AWS_ECS_FAMILY_PREFIX`, `AWS_ECS_LAUNCH_TYPE`, `AWS_ECS_PLATFORM_VERSION`, `AWS_ECS_CPU`, `AWS_ECS_MEMORY_MB`, `AWS_ECS_LOG_GROUP`, `AWS_ECS_LOG_STREAM_PREFIX`, `AWS_ECS_EBS_VOLUME_ROLE_ARN`.
-- `EXECUTOR=gcp-batch`: `GCP_PROJECT`, `GCP_LOCATION`, plus either `GCP_ACCESS_TOKEN` or `GCP_SERVICE_ACCOUNT_EMAIL` + `GCP_SERVICE_ACCOUNT_PRIVATE_KEY`; optional `GCP_BATCH_RUNTIME_SERVICE_ACCOUNT_EMAIL`, `GCP_BATCH_NETWORK`, `GCP_BATCH_SUBNETWORK`, `GCP_BATCH_NO_EXTERNAL_IP`, `GCP_BATCH_MACHINE_TYPE`, `GCP_BATCH_PROVISIONING_MODEL`, `GCP_BATCH_CPU_MILLI`, `GCP_BATCH_MEMORY_MIB`, `GCP_BATCH_BOOT_DISK_MIB`, `GCP_BATCH_JOB_PREFIX`, `GCP_BATCH_CACHE_GCS_BUCKET`.
+### Forges
+
+| Var                                  | Required when  | Purpose                                       |
+| ------------------------------------ | -------------- | --------------------------------------------- |
+| `GITHUB_APP_ID`                      | GitHub forge   | App ID                                        |
+| `GITHUB_APP_PRIVATE_KEY`             | GitHub forge   | PEM (PKCS#1 or PKCS#8)                        |
+| `GITHUB_WEBHOOK_SECRET`              | GitHub forge   | Webhook HMAC secret                           |
+| `GITLAB_ACCESS_TOKEN`                | GitLab forge   | Token with `manage_runner` scope              |
+| `GITLAB_WEBHOOK_SECRET`              | GitLab forge   | Webhook signing or secret token               |
+| `GITLAB_BASE_URL`                    | optional       | GitLab instance URL (default `gitlab.com`)    |
+| `GITLAB_RUNNER_TAGS`                 | optional       | Runner tags (defaults to `RUNNER_LABELS`)     |
+| `CODEBERG_ACCESS_TOKEN`              | Codeberg forge | Token for repo runner registration tokens     |
+| `CODEBERG_RUNNER_REGISTRATION_TOKEN` | Codeberg forge | Static runner registration token alternative  |
+| `CODEBERG_WEBHOOK_SECRET`            | Codeberg forge | Forgejo webhook secret                        |
+| `CODEBERG_SERVER_URL`                | optional       | Forgejo server URL (default Codeberg)         |
+
+### Executors
+
+Pick one with `EXECUTOR=<name>`. Each executor reads its own variables.
+
+#### `fly` (default)
+
+Environment:
+
+| Var             | Required | Purpose                              |
+| --------------- | -------- | ------------------------------------ |
+| `FLY_API_TOKEN` | yes      | Fly Machines API token               |
+| `FLY_APP`       | yes      | Fly app used for runner machines     |
+| `FLY_REGION`    | optional | Fly region (defaults to app default) |
+
+Volumes: one `persistent` Fly volume per Machine. `cache` is rejected because Fly volumes are host-local and not shared.
+
+#### `docker-agent`
+
+Environment:
+
+| Var           | Required | Purpose                    |
+| ------------- | -------- | -------------------------- |
+| `AGENT_URL`   | yes      | URL of `stellwerk-agent`   |
+| `AGENT_TOKEN` | yes      | Bearer token for the agent |
+
+Volumes: the volume list is forwarded to the agent unchanged so it can map entries to local Docker volumes, bind mounts, or NFS.
+
+#### `kubernetes`
+
+Environment:
+
+| Var                              | Required | Purpose                                  |
+| -------------------------------- | -------- | ---------------------------------------- |
+| `K8S_API_SERVER`                 | yes      | API server URL                           |
+| `K8S_NAMESPACE`                  | yes      | Namespace for runner Jobs                |
+| `K8S_BEARER_TOKEN`               | yes      | Service account token                    |
+| `K8S_SERVICE_ACCOUNT`            | optional | Service account assigned to runner pods  |
+| `K8S_IMAGE_PULL_SECRET`          | optional | Image pull secret name                   |
+| `K8S_JOB_PREFIX`                 | optional | Prefix for created Job names             |
+| `K8S_CACHE_CLAIM_PREFIX`         | optional | Prefix for cache PVCs                    |
+| `K8S_TTL_SECONDS_AFTER_FINISHED` | optional | TTL applied to finished Jobs             |
+| `K8S_CPU_REQUEST`                | optional | CPU request for runner container         |
+| `K8S_MEMORY_REQUEST`             | optional | Memory request for runner container      |
+| `K8S_CPU_LIMIT`                  | optional | CPU limit for runner container           |
+| `K8S_MEMORY_LIMIT`               | optional | Memory limit for runner container        |
+
+Volumes: `scratch` → `emptyDir`, `cache` → a stable PVC name (using `K8S_CACHE_CLAIM_PREFIX`), `persistent` → an existing PVC referenced by `id`.
+
+#### `aws-ecs`
+
+Environment:
+
+| Var                           | Required | Purpose                                 |
+| ----------------------------- | -------- | --------------------------------------- |
+| `AWS_REGION`                  | yes      | AWS region                              |
+| `AWS_ACCESS_KEY_ID`           | yes      | Access key                              |
+| `AWS_SECRET_ACCESS_KEY`       | yes      | Secret key                              |
+| `AWS_ECS_CLUSTER`             | yes      | ECS cluster name                        |
+| `AWS_ECS_SUBNETS`             | yes      | Subnets for tasks                       |
+| `AWS_ECS_EXECUTION_ROLE_ARN`  | yes      | Task execution role ARN                 |
+| `AWS_SESSION_TOKEN`           | optional | Session token for temporary credentials |
+| `AWS_ECS_SECURITY_GROUPS`     | optional | Security groups for tasks               |
+| `AWS_ECS_ASSIGN_PUBLIC_IP`    | optional | Assign a public IP to tasks             |
+| `AWS_ECS_TASK_ROLE_ARN`       | optional | Task role ARN                           |
+| `AWS_ECS_FAMILY_PREFIX`       | optional | Prefix for task definition family names |
+| `AWS_ECS_LAUNCH_TYPE`         | optional | `FARGATE` or `EC2`                      |
+| `AWS_ECS_PLATFORM_VERSION`    | optional | Fargate platform version                |
+| `AWS_ECS_CPU`                 | optional | Task CPU units                          |
+| `AWS_ECS_MEMORY_MB`           | optional | Task memory in MB                       |
+| `AWS_ECS_LOG_GROUP`           | optional | CloudWatch log group                    |
+| `AWS_ECS_LOG_STREAM_PREFIX`   | optional | Log stream prefix                       |
+| `AWS_ECS_EBS_VOLUME_ROLE_ARN` | optional | Role ARN for EBS volume management      |
+
+Volumes: a task definition is registered per spawn so it can use the right runner image. `scratch` and non-EFS `persistent` mounts use configured-at-launch EBS volumes; `persistent.id` values beginning with `fs-` map to EFS.
+
+#### `gcp-batch`
+
+`GCP_PROJECT` and `GCP_LOCATION` are always required. Authenticate with either `GCP_ACCESS_TOKEN`, or `GCP_SERVICE_ACCOUNT_EMAIL` + `GCP_SERVICE_ACCOUNT_PRIVATE_KEY`.
+
+Environment:
+
+| Var                                       | Required | Purpose                                      |
+| ----------------------------------------- | -------- | -------------------------------------------- |
+| `GCP_PROJECT`                             | yes      | GCP project ID                               |
+| `GCP_LOCATION`                            | yes      | Batch location/region                        |
+| `GCP_ACCESS_TOKEN`                        | one of   | OAuth access token                           |
+| `GCP_SERVICE_ACCOUNT_EMAIL`               | one of   | Service account email (with private key)     |
+| `GCP_SERVICE_ACCOUNT_PRIVATE_KEY`         | one of   | Service account private key (with email)     |
+| `GCP_BATCH_RUNTIME_SERVICE_ACCOUNT_EMAIL` | optional | Service account assigned to runner VMs       |
+| `GCP_BATCH_NETWORK`                       | optional | VPC network                                  |
+| `GCP_BATCH_SUBNETWORK`                    | optional | Subnetwork                                   |
+| `GCP_BATCH_NO_EXTERNAL_IP`                | optional | Disable external IP on runner VMs            |
+| `GCP_BATCH_MACHINE_TYPE`                  | optional | Compute machine type                         |
+| `GCP_BATCH_PROVISIONING_MODEL`            | optional | `STANDARD` or `SPOT`                         |
+| `GCP_BATCH_CPU_MILLI`                     | optional | CPU in milliCPU                              |
+| `GCP_BATCH_MEMORY_MIB`                    | optional | Memory in MiB                                |
+| `GCP_BATCH_BOOT_DISK_MIB`                 | optional | Boot disk size in MiB                        |
+| `GCP_BATCH_JOB_PREFIX`                    | optional | Prefix for created job names                 |
+| `GCP_BATCH_CACHE_GCS_BUCKET`              | optional | GCS bucket used for `cache` volumes via FUSE |
+
+Volumes: `scratch` → a new persistent disk, `cache` → GCS FUSE using `GCP_BATCH_CACHE_GCS_BUCKET`, `persistent` → an existing persistent disk, `gcs://...`, or `nfs://server/path`.
 
 ## 🧱 Volumes
 
-`RUNNER_VOLUMES` is a JSON array. Volumes are opt-in because shared writable state weakens the default fresh-runner security model.
+`RUNNER_VOLUMES` is a JSON array shared across all executors. Volumes are opt-in because shared writable state weakens the default fresh-runner security model. See each executor above for how the kinds are mapped.
 
 ```json
 [
@@ -91,14 +189,6 @@ Executor-specific variables:
   { "kind": "persistent", "name": "shared", "mountPath": "/mnt/shared", "id": "shared-pvc", "mode": "ro" }
 ]
 ```
-
-Provider mapping:
-
-- Fly supports one `persistent` Fly volume per Machine. `cache` is rejected because Fly volumes are host-local and not shared.
-- Docker agent receives the volume list unchanged so the agent can map it to local Docker volumes, bind mounts, or NFS.
-- Kubernetes maps `scratch` to `emptyDir`, `cache` to a stable PVC name, and `persistent` to an existing PVC.
-- AWS ECS registers a task definition per spawn so it can use the right runner image. `scratch` and non-EFS persistent mounts use configured-at-launch EBS volumes; `persistent.id` values beginning with `fs-` map to EFS.
-- GCP Batch maps `scratch` to a new persistent disk, `cache` to GCS FUSE using `GCP_BATCH_CACHE_GCS_BUCKET`, and `persistent` to an existing persistent disk, `gcs://...`, or `nfs://server/path`.
 
 ## 🧭 Running Modes
 

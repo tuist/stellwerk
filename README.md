@@ -1,11 +1,15 @@
 # Stellwerk 🚦
 
 > [!NOTE]
-> Self-hostable, pluggable compute orchestrator. Ephemeral CI runners for any git forge.
+> Self-hostable, pluggable compute orchestrator. Ephemeral CI runners for any git forge today. Sandbox API for AI agents on the roadmap. Deploy to Cloudflare in five minutes.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/tuist/stellwerk)
 
-A small Hono-based control plane that watches a git forge for queued CI jobs and spawns short-lived self-hosted runners. Stateless. Webhook-driven. Runs on Cloudflare Workers, Node, Bun, Deno, or in Docker from the same source.
+A small Hono-based control plane that provisions ephemeral compute on demand. The executor abstraction is workload-agnostic — the same primitive that boots a CI runner can boot a sandbox for an AI agent — so Stellwerk is a general orchestrator with CI as its first shipped use case. Stateless. Webhook-driven. Runs on Cloudflare Workers, Node, Bun, Deno, or in Docker from the same source.
+
+**Today (v0.1):** CI runner orchestrator. Watches a git forge for queued jobs and spawns short-lived self-hosted runners on Fly Machines, a Docker agent, Kubernetes, AWS ECS, or GCP Batch.
+
+**Next:** sandbox API for AI agents, reusing the same forges-and-executors plumbing. See [`SPEC.md`](./SPEC.md) for the full direction.
 
 ## 🚀 Deploy to Cloudflare
 

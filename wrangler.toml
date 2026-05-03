@@ -1,0 +1,17 @@
+name = "stellwerk"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+RUNNER_LABELS = "self-hosted,stellwerk"
+FLY_APP = "stellwerk-runners"
+EXECUTOR = "fly"
+
+# Secrets — set with `wrangler secret put`:
+#   GITHUB_APP_ID
+#   GITHUB_APP_PRIVATE_KEY        (PEM, PKCS#8)
+#   GITHUB_WEBHOOK_SECRET
+#   FLY_API_TOKEN                 (when EXECUTOR=fly)
+#   AGENT_URL                     (when EXECUTOR=docker-agent)
+#   AGENT_TOKEN                   (when EXECUTOR=docker-agent)

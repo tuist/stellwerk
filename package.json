@@ -1,0 +1,42 @@
+{
+  "name": "stellwerk",
+  "version": "0.1.0-alpha.0",
+  "description": "Self-hostable, pluggable compute orchestrator. Ephemeral CI runners for any git forge.",
+  "type": "module",
+  "license": "MPL-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:cf": "wrangler dev",
+    "dev:node": "tsx watch src/server.node.ts",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:cf": "vitest run --config vitest.cloudflare.config.ts",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.15.2",
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "@types/node": "^20.16.0",
+    "prettier": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^3.90.0"
+  },
+  "aube": {
+    "allowBuilds": {
+      "esbuild": true,
+      "sharp": true,
+      "workerd": true
+    }
+  }
+}

@@ -14,7 +14,7 @@ export interface WebhookDeps {
 
 export function createWebhookHandler(deps: WebhookDeps): RouteHandler<typeof webhookRoute> {
   return async (c) => {
-    const kind = c.req.valid('param').forge
+    const kind = c.req.param('forge') as ForgeKind
     const entry = deps.forges[kind]
     if (!entry) return c.json({ error: `forge "${kind}" not configured` }, 404)
 

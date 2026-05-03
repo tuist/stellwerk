@@ -37,7 +37,8 @@ export function createApp(deps: AppDeps) {
   app.get('/', (c) => c.text('stellwerk'))
   app.openapi(healthRoute, (c) => c.json({ ok: true as const }, 200))
   app.openapi(listForgesRoute, (c) => c.json({ forges: configuredForges(deps).map((kind) => ({ kind })) }, 200))
-  app.openapi(webhookRoute, createWebhookHandler({ ...deps, log: runnerDeps.log }))
+  app.openAPIRegistry.registerPath(webhookRoute)
+  app.post(webhookRoute.getRoutingPath(), createWebhookHandler({ ...deps, log: runnerDeps.log }))
   app.openapi(spawnRunnerRoute, createSpawnRunnerHandler(runnerDeps))
   app.openapi(destroyRunnerRoute, createDestroyRunnerHandler(runnerDeps))
 

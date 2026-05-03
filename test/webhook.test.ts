@@ -16,6 +16,54 @@ describe('POST /webhook/:forge', () => {
     expect(res.status).toBe(401)
   })
 
+  it('verifies the signature before any JSON body parsing', async () => {
+    let verifyCalls = 0
+    let parseCalls = 0
+    const forge = mockForge({
+      verifyWebhook: async () => {
+        verifyCalls++
+        return false
+      },
+      parseJobEvent: () => {
+        parseCalls++
+        return null
+      },
+    })
+    const app = createApp(appDeps({ forge }))
+    const res = await app.request('/webhook/github', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    })
+    expect(res.status).toBe(401)
+    expect(verifyCalls).toBe(1)
+    expect(parseCalls).toBe(0)
+  })
+
+  it('ignores parse failures after signature verification', async () => {
+    let parsedBody = ''
+    const forge = mockForge({
+      parseJobEvent: (body) => {
+        parsedBody = body
+        try {
+          JSON.parse(body)
+        } catch {
+          return null
+        }
+        return null
+      },
+    })
+    const app = createApp(appDeps({ forge }))
+    const res = await app.request('/webhook/github', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ignored: true })
+    expect(parsedBody).toBe('{')
+  })
+
   it('ignores non-job events', async () => {
     const forge = mockForge({ event: null })
     const app = createApp(appDeps({ forge }))

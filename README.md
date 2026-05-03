@@ -7,10 +7,6 @@
 
 A small Hono-based control plane that watches a git forge for queued CI jobs and spawns short-lived self-hosted runners. Stateless. Webhook-driven. Runs on Cloudflare Workers, Node, Bun, Deno, or in Docker from the same source.
 
-## ✨ Status
-
-v0.1 alpha: GitHub Actions, GitLab CI, and Codeberg Actions on Fly Machines, a self-hosted Docker agent, Kubernetes, AWS ECS, or GCP Batch.
-
 ## 🚀 Deploy to Cloudflare
 
 The fastest path is the **Deploy to Cloudflare** button above. The button reads `wrangler.toml`, which ships with a working default (GitHub forge on Fly Machines) so the deploy flow has something to prompt for. Any forge + executor combination is supported — see [Configuration](#-configuration) for the variables each one needs, and edit `wrangler.toml` (`[vars]` and `[secrets].required`) before clicking the button if you want a different combination.

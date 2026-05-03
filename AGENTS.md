@@ -11,13 +11,18 @@ Stellwerk is a small, runtime-agnostic control plane (Hono) that orchestrates ep
 ## Repository map
 
 - `src/` — control plane source.
-  - `app.ts` — Hono app factory (`createApp(deps)`); injectable for tests.
+  - `app.ts` — thin assembler. `createApp(deps)` wires the routes, MCP transport, and OpenAPI docs together.
   - `config.ts` — env → `AppDeps` wiring.
   - `index.ts` — Cloudflare Workers entry.
   - `server.node.ts` — Node entry (`@hono/node-server`).
   - `forge.ts` / `executor.ts` — public interfaces.
   - `forges/` — forge implementations (one file per forge).
   - `executors/` — compute backends.
+  - `openapi.ts` — Zod schemas + `createRoute()` definitions for the public REST surface, plus `mountOpenApiDocs(app)` for `/openapi.json` and Swagger UI at `/docs`.
+  - `mcp.ts` — `createMcpServer(deps)` and `createMcpHttpHandler(deps)` (Streamable HTTP transport plumbing). Mounted at `/mcp`.
+  - `webhook.ts` — `createWebhookHandler(deps)` for `POST /webhook/{forge}`. Owns the invariants below.
+  - `runners.ts` — `provisionRunner` / `destroyRunner` (forge-aware mint + spawn) and the REST handlers for `POST /runners` and `DELETE /runners/{id}`. Same operations are exposed as MCP tools.
+  - `log.ts` — `Logger` type and `defaultLog` (structured JSON line writer).
   - `util/` — base64url, hex, HMAC verify, RS256 JWT — Web-Crypto only.
 - `runner-images/` — per-forge Docker images for the runner VM.
 - `test/` — vitest tests. Test files are colocated by concern, not by source path.
@@ -55,6 +60,22 @@ These are the rules `src/app.ts` enforces; preserve them when adding a new forge
 3. Parse the event _after_ verifying. A failed parse returns `200 {ignored: true}` (some forges send pings / unsupported event kinds; replying with anything other than 2xx makes them re-deliver).
 4. Filter by required labels before minting a token. Token-minting calls the forge API, so we don't want to do it for jobs we wouldn't accept.
 5. Mint the runner registration token, then call the executor. Both can fail; both produce structured log lines and `502`.
+
+## Client API surface (REST + MCP)
+
+The control plane exposes two client-facing surfaces that must stay in lockstep:
+
+- **REST**, defined in `src/openapi.ts` via `@hono/zod-openapi` `createRoute()`. The OpenAPI document is auto-generated and served at `/openapi.json`; Swagger UI lives at `/docs`.
+- **MCP**, defined in `src/mcp.ts`. Tools are registered on the `McpServer` returned by `createMcpServer(deps)` and reachable at `/mcp` over Streamable HTTP.
+
+When you add, change, or remove a client capability, do all of the following in the same change:
+
+1. Update or add the route in `src/openapi.ts` (request/response Zod schemas, `tags`, `summary`, `description`).
+2. Wire the handler in `src/app.ts` using `app.openapi(route, handler)`.
+3. Add or update the matching MCP tool in `src/mcp.ts` so AI agents see the same surface.
+4. Cover the REST route and the MCP tool in `test/app.test.ts`.
+
+This rule does **not** apply to the forge webhook (`POST /webhook/{forge}`) — webhooks are forge-driven, not client-driven, and have no MCP analogue. Everything else clients can reach should be on both surfaces.
 
 ## Adding a forge
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../src/app.ts'
-import { appDeps, callMcp, mockExecutor } from './helpers.ts'
+import { appDeps, mockExecutor, withMcpClient } from './helpers.ts'
 
 const spawnBody = {
   forge: 'github',
@@ -92,27 +92,19 @@ describe('DELETE /runners/:id', () => {
 describe('MCP runner tools', () => {
   it('spawn_runner provisions a runner via the executor', async () => {
     const exec = mockExecutor()
-    const app = createApp(appDeps({ executor: exec }))
-    const payload = await callMcp<{ result: { content: { text: string }[] } }>(app, {
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: 'spawn_runner', arguments: spawnBody },
-    })
-    const result = JSON.parse(payload.result.content[0]?.text ?? '{}') as { runnerId: string }
-    expect(result.runnerId).toBe('runner-1')
+    const result = await withMcpClient(appDeps({ executor: exec }), (client) =>
+      client.callTool({ name: 'spawn_runner', arguments: spawnBody }),
+    )
+    const text = (result.content as { type: string; text: string }[])[0]?.text ?? ''
+    expect(JSON.parse(text)).toMatchObject({ runnerId: 'runner-1' })
     expect(exec.spawnCalls).toHaveLength(1)
   })
 
   it('destroy_runner asks the executor to destroy', async () => {
     const exec = mockExecutor()
-    const app = createApp(appDeps({ executor: exec }))
-    await callMcp(app, {
-      jsonrpc: '2.0',
-      id: 2,
-      method: 'tools/call',
-      params: { name: 'destroy_runner', arguments: { id: 'runner-1' } },
-    })
+    await withMcpClient(appDeps({ executor: exec }), (client) =>
+      client.callTool({ name: 'destroy_runner', arguments: { id: 'runner-1' } }),
+    )
     expect(exec.destroyCalls).toEqual(['runner-1'])
   })
 })

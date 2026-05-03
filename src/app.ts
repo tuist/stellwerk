@@ -2,7 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import type { Executor, RunnerVolume } from './executor.ts'
 import type { Forge, ForgeKind } from './forge.ts'
 import { defaultLog, type Logger } from './log.ts'
-import { createMcpHttpHandler } from './mcp.ts'
+import { createMcpHttpHandler, type McpDeps } from './mcp.ts'
 import {
   destroyRunnerRoute,
   healthRoute,
@@ -31,33 +31,37 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps) {
-  const log = deps.log ?? defaultLog
+  const runnerDeps = buildRunnerDeps(deps)
   const app = new OpenAPIHono()
-  const runnerDeps: RunnerDeps = {
-    forges: deps.forges,
-    executor: deps.executor,
-    runnerVolumes: deps.runnerVolumes,
-    log,
-  }
 
   app.get('/', (c) => c.text('stellwerk'))
   app.openapi(healthRoute, (c) => c.json({ ok: true as const }, 200))
   app.openapi(listForgesRoute, (c) => c.json({ forges: configuredForges(deps).map((kind) => ({ kind })) }, 200))
-  app.openapi(webhookRoute, createWebhookHandler({ ...deps, log }))
+  app.openapi(webhookRoute, createWebhookHandler({ ...deps, log: runnerDeps.log }))
   app.openapi(spawnRunnerRoute, createSpawnRunnerHandler(runnerDeps))
   app.openapi(destroyRunnerRoute, createDestroyRunnerHandler(runnerDeps))
 
   mountOpenApiDocs(app)
-  app.all(
-    '/mcp',
-    createMcpHttpHandler({
-      listForges: () => configuredForges(deps),
-      spawnRunner: (req) => provisionRunner(runnerDeps, req),
-      destroyRunner: (id) => destroyRunner(runnerDeps, id),
-    }),
-  )
+  app.all('/mcp', createMcpHttpHandler(buildMcpDeps(deps, runnerDeps)))
 
   return app
+}
+
+export function buildMcpDeps(deps: AppDeps, runnerDeps: RunnerDeps): McpDeps {
+  return {
+    listForges: () => configuredForges(deps),
+    spawnRunner: (req) => provisionRunner(runnerDeps, req),
+    destroyRunner: (id) => destroyRunner(runnerDeps, id),
+  }
+}
+
+export function buildRunnerDeps(deps: AppDeps): RunnerDeps {
+  return {
+    forges: deps.forges,
+    executor: deps.executor,
+    runnerVolumes: deps.runnerVolumes,
+    log: deps.log ?? defaultLog,
+  }
 }
 
 function configuredForges(deps: AppDeps): ForgeKind[] {

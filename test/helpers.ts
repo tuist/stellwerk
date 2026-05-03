@@ -1,7 +1,9 @@
-import { expect } from 'vitest'
-import type { createApp, AppDeps } from '../src/app.ts'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
+import { buildMcpDeps, buildRunnerDeps, type AppDeps } from '../src/app.ts'
 import type { Executor, SpawnOpts } from '../src/executor.ts'
 import type { Forge, JobEvent } from '../src/forge.ts'
+import { createMcpServer } from '../src/mcp.ts'
 
 export function mockForge(over: Partial<Forge> & { event?: JobEvent | null } = {}): Forge & { mintCalls: number } {
   const m = {
@@ -61,18 +63,15 @@ export const queuedEvent: JobEvent = {
   scope: { forge: 'github', installationId: '99', repoFullName: 'octo/repo' },
 }
 
-export async function callMcp<T = unknown>(app: ReturnType<typeof createApp>, body: unknown): Promise<T> {
-  const res = await app.request('/mcp', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-    },
-    body: JSON.stringify(body),
-  })
-  expect(res.status).toBe(200)
-  const text = await res.text()
-  const dataLine = text.split('\n').find((line) => line.startsWith('data: '))
-  if (!dataLine) throw new Error(`no data line in SSE response: ${text}`)
-  return JSON.parse(dataLine.slice('data: '.length)) as T
+export async function withMcpClient<T>(deps: AppDeps, fn: (client: Client) => Promise<T>): Promise<T> {
+  const server = createMcpServer(buildMcpDeps(deps, buildRunnerDeps(deps)))
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const client = new Client({ name: 'stellwerk-test', version: '0.0.0' })
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+  try {
+    return await fn(client)
+  } finally {
+    await client.close()
+    await server.close()
+  }
 }

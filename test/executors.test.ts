@@ -3,6 +3,7 @@ import { AwsEcsExecutor } from '../src/executors/aws-ecs.ts'
 import { DockerAgentExecutor } from '../src/executors/docker-agent.ts'
 import { FlyExecutor } from '../src/executors/fly.ts'
 import { GcpBatchExecutor } from '../src/executors/gcp-batch.ts'
+import { HetznerExecutor } from '../src/executors/hetzner.ts'
 import { KubernetesExecutor } from '../src/executors/kubernetes.ts'
 import type { SpawnOpts } from '../src/executor.ts'
 
@@ -193,6 +194,81 @@ describe('AwsEcsExecutor', () => {
         },
       ],
     })
+  })
+})
+
+describe('HetznerExecutor', () => {
+  it('creates a server with cloud-init user_data and returns the numeric id as a string', async () => {
+    const { fetchFn, calls } = captureFetch([{ server: { id: 987654 }, action: { id: 1 } }])
+    const executor = new HetznerExecutor({
+      apiToken: 'hetz-token',
+      location: 'fsn1',
+      apiBaseUrl: 'https://hetz.test/v1',
+      fetchFn,
+    })
+
+    const id = await executor.spawnRunner(spawnOpts)
+
+    expect(id).toBe('987654')
+    expect(calls[0]?.url).toBe('https://hetz.test/v1/servers')
+    expect(calls[0]?.init.headers).toMatchObject({ authorization: 'Bearer hetz-token' })
+    const body = calls[0]?.body as Record<string, unknown>
+    expect(body).toMatchObject({
+      server_type: 'cx22',
+      image: 'ubuntu-24.04',
+      location: 'fsn1',
+      labels: { 'stellwerk.dev/forge': 'github', 'stellwerk.dev/job-id': '42' },
+    })
+    expect(typeof body.name).toBe('string')
+    expect(body.name as string).toMatch(/^stellwerk-github-42-/)
+    expect(body.user_data).toContain('#cloud-config')
+    expect(body.user_data).toContain('RUNNER_TOKEN=tok-123')
+    expect(body.user_data).toContain('docker run')
+    expect(body.user_data).toContain("'ghcr.io/stellwerk/runner-github:latest'")
+  })
+
+  it('attaches persistent volumes by numeric id and bind-mounts them in docker run', async () => {
+    const { fetchFn, calls } = captureFetch([{ server: { id: 1 }, action: { id: 1 } }])
+    const executor = new HetznerExecutor({
+      apiToken: 'hetz-token',
+      apiBaseUrl: 'https://hetz.test/v1',
+      fetchFn,
+    })
+
+    await executor.spawnRunner({
+      ...spawnOpts,
+      volumes: [{ kind: 'persistent', id: '12345', mountPath: '/cache', mode: 'rw-exclusive' }],
+    })
+
+    const body = calls[0]?.body as Record<string, unknown>
+    expect(body).toMatchObject({ volumes: [12345], automount: false })
+    expect(body.user_data).toContain('/mnt/HC_Volume_12345')
+    expect(body.user_data).toContain("'/cache'")
+  })
+
+  it('rejects cache volumes', async () => {
+    const executor = new HetznerExecutor({
+      apiToken: 'hetz-token',
+      apiBaseUrl: 'https://hetz.test/v1',
+      fetchFn: captureFetch().fetchFn,
+    })
+
+    await expect(
+      executor.spawnRunner({
+        ...spawnOpts,
+        volumes: [{ kind: 'cache', key: 'npm', scope: 'repo', mountPath: '/cache' }],
+      }),
+    ).rejects.toThrow('Hetzner: cache volumes are not supported')
+  })
+
+  it('treats 404 on destroy as already gone', async () => {
+    const fetchFn = (async () => new Response('', { status: 404 })) as typeof fetch
+    const executor = new HetznerExecutor({
+      apiToken: 'hetz-token',
+      apiBaseUrl: 'https://hetz.test/v1',
+      fetchFn,
+    })
+    await expect(executor.destroyRunner('999')).resolves.toBeUndefined()
   })
 })
 

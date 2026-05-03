@@ -7,6 +7,7 @@ import { DockerAgentExecutor } from './executors/docker-agent.ts'
 import { KubernetesExecutor } from './executors/kubernetes.ts'
 import { AwsEcsExecutor } from './executors/aws-ecs.ts'
 import { GcpBatchExecutor } from './executors/gcp-batch.ts'
+import { HetznerExecutor } from './executors/hetzner.ts'
 import type { Executor, RunnerVolume, VolumeMode } from './executor.ts'
 
 export interface RawEnv {
@@ -77,6 +78,18 @@ export interface RawEnv {
   AWS_ECS_LOG_GROUP?: string
   AWS_ECS_LOG_STREAM_PREFIX?: string
   AWS_ECS_EBS_VOLUME_ROLE_ARN?: string
+
+  // Hetzner Cloud executor
+  HETZNER_API_TOKEN?: string
+  HETZNER_SERVER_TYPE?: string
+  HETZNER_IMAGE?: string
+  HETZNER_LOCATION?: string
+  HETZNER_DATACENTER?: string
+  HETZNER_SSH_KEYS?: string
+  HETZNER_NETWORKS?: string
+  HETZNER_LABELS?: string
+  HETZNER_DISABLE_IPV4?: string
+  HETZNER_DISABLE_IPV6?: string
 
   // GCP Batch executor
   GCP_PROJECT?: string
@@ -256,7 +269,48 @@ function buildExecutorFromEnv(env: RawEnv): Executor {
       cacheGcsBucket: env.GCP_BATCH_CACHE_GCS_BUCKET,
     })
   }
+  if (choice === 'hetzner' || choice === 'hetzner-cloud') {
+    if (!env.HETZNER_API_TOKEN) {
+      throw new Error('EXECUTOR=hetzner requires HETZNER_API_TOKEN')
+    }
+    return new HetznerExecutor({
+      apiToken: env.HETZNER_API_TOKEN,
+      serverType: env.HETZNER_SERVER_TYPE,
+      image: env.HETZNER_IMAGE,
+      location: env.HETZNER_LOCATION,
+      datacenter: env.HETZNER_DATACENTER,
+      sshKeys: parseList(env.HETZNER_SSH_KEYS),
+      networks: parseList(env.HETZNER_NETWORKS).map((value) => {
+        const n = Number(value)
+        if (!Number.isInteger(n)) throw new Error(`HETZNER_NETWORKS entries must be numeric ids, got ${value}`)
+        return n
+      }),
+      labels: parseLabels(env.HETZNER_LABELS),
+      enableIpv4: env.HETZNER_DISABLE_IPV4 ? !parseRequiredBool(env.HETZNER_DISABLE_IPV4) : undefined,
+      enableIpv6: env.HETZNER_DISABLE_IPV6 ? !parseRequiredBool(env.HETZNER_DISABLE_IPV6) : undefined,
+      imageNamespace: env.RUNNER_IMAGE_NAMESPACE,
+    })
+  }
   throw new Error(`unknown EXECUTOR: ${choice}`)
+}
+
+function parseLabels(value: string | undefined): Record<string, string> | undefined {
+  if (!value) return undefined
+  const out: Record<string, string> = {}
+  for (const pair of value.split(',')) {
+    const trimmed = pair.trim()
+    if (!trimmed) continue
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) throw new Error(`labels must be key=value, got ${trimmed}`)
+    out[trimmed.slice(0, eq)] = trimmed.slice(eq + 1)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function parseRequiredBool(value: string): boolean {
+  const parsed = parseOptionalBool(value)
+  if (parsed === undefined) throw new Error(`expected boolean, got ${value}`)
+  return parsed
 }
 
 function parseList(value: string | undefined): string[] {

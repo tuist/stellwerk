@@ -1,5 +1,6 @@
 # Stellwerk
 
+> [!NOTE]
 > Self-hostable, pluggable compute orchestrator. Ephemeral CI runners for any git forge today. Sandbox API for AI workflows on the roadmap. Deploy to Cloudflare in five minutes.
 
 ## 1. What this is

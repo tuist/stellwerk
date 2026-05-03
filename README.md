@@ -6,38 +6,43 @@
 
 A small Hono-based control plane that watches a git forge for queued CI jobs and spawns short-lived self-hosted runners. Stateless. Webhook-driven. Runs on Cloudflare Workers, Node, Bun, Deno, or in Docker from the same source.
 
-## ✨ Status
-
-v0.1 alpha: GitHub Actions, GitLab CI, and Codeberg Actions on Fly Machines or a self-hosted Docker agent.
-
 ## 🚀 Quick Start
 
+### 1. Install Stellwerk
+
 ```sh
-# 1. Install Stellwerk.
 git clone https://github.com/tuist/stellwerk.git && cd stellwerk
 mise install
 aube install
+```
 
-# 2. Deploy the control plane to Cloudflare Workers.
+### 2. Deploy the control plane to Cloudflare Workers
+
+```sh
 aube run deploy
+```
 
-# 3. Push secrets.
+### 3. Push secrets
+
+```sh
 wrangler secret put GITHUB_APP_ID
 wrangler secret put GITHUB_APP_PRIVATE_KEY     # paste the PEM
 wrangler secret put GITHUB_WEBHOOK_SECRET
 wrangler secret put FLY_API_TOKEN
+```
 
-# 4. Configure the Fly app used for runner machines.
-#    Stellwerk creates Machines in this app as queued jobs arrive.
-#    The Machines auto-destroy after the runner exits.
-#    Set FLY_APP=my-runners in wrangler.toml [vars] or as a secret.
+### 4. Configure the Fly app used for runner machines
 
-# 5. Create the GitHub App from docs/github-app-manifest.json.
-#    Set the webhook URL to https://<your-worker>/webhook/github,
-#    set its secret to GITHUB_WEBHOOK_SECRET, and install it on repos.
+Stellwerk creates Machines in this app as queued jobs arrive. The Machines auto-destroy after the runner exits. Set `FLY_APP=my-runners` in `wrangler.toml` `[vars]` or as a secret.
 
-# 6. Use the runner in a workflow.
-#    runs-on: [self-hosted, stellwerk]
+### 5. Create the GitHub App from `docs/github-app-manifest.json`
+
+Set the webhook URL to `https://<your-worker>/webhook/github`, set its secret to `GITHUB_WEBHOOK_SECRET`, and install it on repos.
+
+### 6. Use the runner in a workflow
+
+```yaml
+runs-on: [self-hosted, stellwerk]
 ```
 
 First job picks up in ~2s.

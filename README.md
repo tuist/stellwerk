@@ -1,5 +1,6 @@
 # Stellwerk 🚦
 
+> [!NOTE]
 > Self-hostable, pluggable compute orchestrator. Ephemeral CI runners for any git forge.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/tuist/stellwerk)

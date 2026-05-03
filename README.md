@@ -63,19 +63,35 @@ All configuration is environment-driven. On Cloudflare these are `vars` + `secre
 
 ### Forges
 
-| Var                                  | Required when  | Purpose                                       |
-| ------------------------------------ | -------------- | --------------------------------------------- |
-| `GITHUB_APP_ID`                      | GitHub forge   | App ID                                        |
-| `GITHUB_APP_PRIVATE_KEY`             | GitHub forge   | PEM (PKCS#1 or PKCS#8)                        |
-| `GITHUB_WEBHOOK_SECRET`              | GitHub forge   | Webhook HMAC secret                           |
-| `GITLAB_ACCESS_TOKEN`                | GitLab forge   | Token with `manage_runner` scope              |
-| `GITLAB_WEBHOOK_SECRET`              | GitLab forge   | Webhook signing or secret token               |
-| `GITLAB_BASE_URL`                    | optional       | GitLab instance URL (default `gitlab.com`)    |
-| `GITLAB_RUNNER_TAGS`                 | optional       | Runner tags (defaults to `RUNNER_LABELS`)     |
-| `CODEBERG_ACCESS_TOKEN`              | Codeberg forge | Token for repo runner registration tokens     |
-| `CODEBERG_RUNNER_REGISTRATION_TOKEN` | Codeberg forge | Static runner registration token alternative  |
-| `CODEBERG_WEBHOOK_SECRET`            | Codeberg forge | Forgejo webhook secret                        |
-| `CODEBERG_SERVER_URL`                | optional       | Forgejo server URL (default Codeberg)         |
+Stellwerk enables a forge whenever the variables below are present, so one deployment can serve multiple forges at once.
+
+#### GitHub
+
+| Var                      | Required | Purpose                |
+| ------------------------ | -------- | ---------------------- |
+| `GITHUB_APP_ID`          | yes      | App ID                 |
+| `GITHUB_APP_PRIVATE_KEY` | yes      | PEM (PKCS#1 or PKCS#8) |
+| `GITHUB_WEBHOOK_SECRET`  | yes      | Webhook HMAC secret    |
+
+#### GitLab
+
+| Var                     | Required | Purpose                                    |
+| ----------------------- | -------- | ------------------------------------------ |
+| `GITLAB_ACCESS_TOKEN`   | yes      | Token with `manage_runner` scope           |
+| `GITLAB_WEBHOOK_SECRET` | yes      | Webhook signing or secret token            |
+| `GITLAB_BASE_URL`       | optional | GitLab instance URL (default `gitlab.com`) |
+| `GITLAB_RUNNER_TAGS`    | optional | Runner tags (defaults to `RUNNER_LABELS`)  |
+
+#### Codeberg
+
+`CODEBERG_ACCESS_TOKEN` and `CODEBERG_RUNNER_REGISTRATION_TOKEN` are alternatives — set one or the other.
+
+| Var                                  | Required | Purpose                                      |
+| ------------------------------------ | -------- | -------------------------------------------- |
+| `CODEBERG_ACCESS_TOKEN`              | one of   | Token for repo runner registration tokens    |
+| `CODEBERG_RUNNER_REGISTRATION_TOKEN` | one of   | Static runner registration token alternative |
+| `CODEBERG_WEBHOOK_SECRET`            | yes      | Forgejo webhook secret                       |
+| `CODEBERG_SERVER_URL`                | optional | Forgejo server URL (default Codeberg)        |
 
 ### Executors
 
